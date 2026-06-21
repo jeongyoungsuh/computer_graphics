@@ -3152,7 +3152,13 @@ function drawDoorPrompt() {
   const prompt = document.createElement("section");
   prompt.id = "doorPrompt";
   prompt.className = "door-prompt";
-  prompt.innerHTML = `<span>F</span><strong>Press F to go through</strong>`;
+  prompt.innerHTML = `
+    <span class="door-key">F</span>
+    <div>
+      <strong>Press F to go through</strong>
+      <small>Press ESC to unlock mouse before clicking UI</small>
+    </div>
+  `;
   document.querySelector(".stage").appendChild(prompt);
 }
 
