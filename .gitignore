@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.DS_Store
+Thumbs.db
+
+# Duplicate local asset backup. The web build uses public/assets.
+/assets/
+
+# Local/editor noise
+.env
+.env.*
+.vscode/
