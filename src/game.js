@@ -73,7 +73,7 @@ const state = {
   yaw: 0,
   pitch: 0,
   cameraMode: "third",
-  skeletonPanelEnabled: true,
+  skeletonPanelEnabled: false,
   minimapExpanded: false,
   targetHit: false,
   room1PuzzleSolved: false,
