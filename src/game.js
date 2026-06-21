@@ -32,6 +32,8 @@ const LOADING_MIN_SECONDS = 1.2;
 const LOADING_FAILSAFE_SECONDS = 6;
 const START_ROOM_ID = "1";
 const ASSET_BASE = `${import.meta.env.BASE_URL}assets/`;
+const REPORT_SHOT = new URLSearchParams(window.location.search).get("shot") || "";
+const REPORT_SHOT_MODE = REPORT_SHOT.length > 0;
 
 const map = [
   "########################################",
@@ -101,7 +103,7 @@ const state = {
 };
 
 const player = {
-  pos: START_ROOM_ID === "3" ? tileToWorld(28.5, 7.5) : tileToWorld(3.2, 4.3),
+  pos: tileToWorld(...initialPlayerTile()),
   velY: 0,
 };
 player.pos.y = 0;
@@ -124,6 +126,8 @@ const uiTimers = { hud: 0, minimap: 0 };
 const renderSize = { width: 0, height: 0 };
 let lastSkeletonHelperUpdate = 0;
 let lastPromptRoomId = "";
+let lastFrameAt = performance.now();
+const perf = { fps: 0, ms: 0, accum: 0, frames: 0 };
 const MAX_STUCK_ARROW_LIGHTS = 6;
 const botAssets = {
   paladin: null,
@@ -167,6 +171,14 @@ const statue = { pos: tileToWorld(19.5, 4.5), mesh: null, enabled: false };
 
 function tileToWorld(tx, ty) {
   return new THREE.Vector3((tx - map[0].length / 2) * CELL, 0, (ty - map.length / 2) * CELL);
+}
+
+function initialPlayerTile() {
+  if (REPORT_SHOT.startsWith("room2") || REPORT_SHOT.includes("paladin") || REPORT_SHOT.includes("rune")) return [18.6, 7.3];
+  if (REPORT_SHOT.startsWith("room3") || REPORT_SHOT.includes("glass") || REPORT_SHOT.includes("victory")) return [28.5, 7.5];
+  if (REPORT_SHOT.includes("door_prompt") || REPORT_SHOT.includes("door_open")) return [12.2, 7.5];
+  if (START_ROOM_ID === "3") return [28.5, 7.5];
+  return [3.2, 4.3];
 }
 
 function worldToTile(x, z) {
@@ -1126,6 +1138,107 @@ function applyStartRoomMode() {
   state.doorMessageTimer = 2;
 }
 
+function applyReportShotPreset() {
+  if (!REPORT_SHOT_MODE) return;
+  state.gameReady = true;
+  state.loadingStartedAt = performance.now() - 10000;
+  state.skeletonPanelEnabled = false;
+  state.brightness = 2.7;
+  applyBrightness();
+
+  const setPlayer = (tx, ty, yaw = Math.PI / 2, pitch = -0.08) => {
+    player.pos.copy(tileToWorld(tx, ty));
+    player.pos.y = 0;
+    state.yaw = yaw;
+    state.pitch = pitch;
+  };
+
+  const openDoor = (cell) => {
+    const door = doorByCell(cell);
+    if (!door) return;
+    door.open = true;
+    door.openAmount = 1;
+  };
+
+  if (REPORT_SHOT.includes("room2") || REPORT_SHOT.includes("paladin") || REPORT_SHOT.includes("rune")) {
+    state.room1PuzzleSolved = true;
+    openDoor("A");
+  }
+  if (REPORT_SHOT.includes("room3") || REPORT_SHOT.includes("glass") || REPORT_SHOT.includes("victory")) {
+    state.room1PuzzleSolved = true;
+    state.room2PuzzleSolved = true;
+    openDoor("A");
+    openDoor("B");
+  }
+
+  if (REPORT_SHOT.includes("pillar_ignite") || REPORT_SHOT.includes("surfel") || REPORT_SHOT.includes("fire")) {
+    room1Pillars.slice(0, REPORT_SHOT.includes("three") || REPORT_SHOT.includes("door_open") ? 3 : 1).forEach(lightRoom1Pillar);
+  }
+
+  if (REPORT_SHOT.includes("room2") || REPORT_SHOT.includes("rune") || REPORT_SHOT.includes("password")) {
+    bots.filter((bot) => bot.roomId === "2").slice(0, 3).forEach((bot, index) => {
+      if (REPORT_SHOT.includes("rune") || REPORT_SHOT.includes("password")) {
+        bot.dead = true;
+        bot.state = "dead";
+        bot.pos.copy(tileToWorld(17.5 + index * 2, 6.5 + (index % 2)));
+        revealRoom2Rune(bot);
+      } else {
+        bot.pos.copy(tileToWorld(18.5 + index * 1.2, 6.4 + index * 0.35));
+        bot.state = index === 0 && REPORT_SHOT.includes("attack") ? "attack" : "chase";
+      }
+    });
+  }
+
+  if (REPORT_SHOT.includes("password") || REPORT_SHOT.includes("rune_input")) {
+    openPuzzleModal("B");
+  }
+
+  if (REPORT_SHOT.includes("glass") || REPORT_SHOT.includes("room3")) {
+    const firstSafe = room3BridgeTiles.find((tile) => tile.safe);
+    const firstWeak = room3BridgeTiles.find((tile) => !tile.safe);
+    if (firstSafe && (REPORT_SHOT.includes("arrow_test") || REPORT_SHOT.includes("clear"))) testBridgeTile(firstSafe);
+    if (firstWeak && (REPORT_SHOT.includes("break") || REPORT_SHOT.includes("weak") || REPORT_SHOT.includes("fall"))) breakBridgeTile(firstWeak, "Glass shattered");
+  }
+
+  if (REPORT_SHOT.includes("death") && !REPORT_SHOT.includes("paladin")) {
+    state.playerHp = 0;
+    state.playerDead = true;
+    state.playerDeathStarted = true;
+    state.playerDeathTimer = PLAYER_DEATH_OVERLAY_DELAY + 0.2;
+  }
+
+  if (REPORT_SHOT.includes("fall")) {
+    setPlayer(30.5, 6.5, Math.PI / 2, -0.16);
+    state.room3Falling = true;
+    state.room3FallTimer = 0.55;
+    player.pos.y = -2.1;
+  }
+
+  if (REPORT_SHOT.includes("victory") || REPORT_SHOT.includes("clear")) {
+    setPlayer(37.5, 7.5, Math.PI / 2, -0.12);
+    completeRoom3Bridge();
+  }
+
+  if (REPORT_SHOT.includes("door_prompt")) setPlayer(12.15, 7.5, Math.PI / 2, -0.08);
+  if (REPORT_SHOT.includes("door_open")) {
+    state.room1PuzzleSolved = true;
+    openDoor("A");
+    setPlayer(12.15, 7.5, Math.PI / 2, -0.08);
+  }
+  if (REPORT_SHOT.includes("wall") || REPORT_SHOT.includes("texture")) setPlayer(5.5, 3.5, -0.2, -0.04);
+  if (REPORT_SHOT.includes("trajectory") || REPORT_SHOT.includes("collision")) {
+    state.bowDrawing = true;
+    state.bowDraw = 1;
+  }
+
+  updateObjectivePrompt(currentRoom());
+  updateDoorPrompt();
+  updatePlayerHpHud();
+  updateGameOverOverlay();
+  updateVictoryOverlay();
+  updateLoadingOverlay();
+}
+
 function addTorch(tx, ty) {
   const pos = tileToWorld(tx, ty);
   const group = new THREE.Group();
@@ -1920,23 +2033,41 @@ function makeBowMesh() {
   return group;
 }
 
+const arrowAssetCache = {
+  shafts: new Map(),
+  tip: new THREE.ConeGeometry(0.055, 0.16, 10),
+  feather: new THREE.PlaneGeometry(0.12, 0.06),
+  flame: new THREE.SphereGeometry(0.075, 10, 8),
+  shaftMat: makeMaterial(0x6b4427, 0.55),
+  tipMat: makeMaterial(0xcfd5dd, 0.38),
+  featherMat: new THREE.MeshBasicMaterial({ color: 0xe9edf2, side: THREE.DoubleSide }),
+  flameMat: new THREE.MeshBasicMaterial({ color: 0xff8236 }),
+};
+
+function getArrowShaftGeometry(length) {
+  const key = length.toFixed(2);
+  if (!arrowAssetCache.shafts.has(key)) {
+    arrowAssetCache.shafts.set(key, new THREE.CylinderGeometry(0.018, 0.018, length, 8));
+  }
+  return arrowAssetCache.shafts.get(key);
+}
+
 function makeArrowMesh(length = 0.82, burning = true) {
   const group = new THREE.Group();
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, length, 8), makeMaterial(0x6b4427, 0.55));
+  const shaft = new THREE.Mesh(getArrowShaftGeometry(length), arrowAssetCache.shaftMat);
   shaft.rotation.x = Math.PI / 2;
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.16, 10), makeMaterial(0xcfd5dd, 0.38));
+  const tip = new THREE.Mesh(arrowAssetCache.tip, arrowAssetCache.tipMat);
   tip.position.z = -length / 2 - 0.07;
   tip.rotation.x = -Math.PI / 2;
-  const featherMat = new THREE.MeshBasicMaterial({ color: 0xe9edf2, side: THREE.DoubleSide });
   for (const side of [-1, 1]) {
-    const feather = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.06), featherMat);
+    const feather = new THREE.Mesh(arrowAssetCache.feather, arrowAssetCache.featherMat);
     feather.position.set(side * 0.035, 0, length / 2 - 0.08);
     feather.rotation.set(0, side * 0.55, 0);
     group.add(feather);
   }
   group.add(shaft, tip);
   if (burning) {
-    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff8236 }));
+    const flame = new THREE.Mesh(arrowAssetCache.flame, arrowAssetCache.flameMat);
     flame.position.z = -length / 2 - 0.16;
     group.add(flame);
     group.userData.flame = flame;
@@ -2432,6 +2563,17 @@ function fireArrow() {
   state.fireFlash = 1;
   state.bowRelease = 1;
   state.arrowCooldown = ARROW_COOLDOWN;
+}
+
+function prewarmArrowAssets() {
+  const mesh = makeArrowMesh(0.92, true);
+  mesh.position.copy(player.pos).add(new THREE.Vector3(0, EYE_HEIGHT, 0));
+  scene.add(mesh);
+  try {
+    renderer.compile(scene, camera);
+  } finally {
+    scene.remove(mesh);
+  }
 }
 
 function distancePointToSegment(point, start, end) {
@@ -2969,6 +3111,34 @@ function drawDoorPrompt() {
   document.querySelector(".stage").appendChild(prompt);
 }
 
+function drawPerfHud() {
+  if (document.getElementById("perfHud")) return;
+  const hud = document.createElement("section");
+  hud.id = "perfHud";
+  hud.className = "perf-hud";
+  hud.textContent = "FPS --";
+  document.querySelector(".stage").appendChild(hud);
+}
+
+function updatePerf(dt) {
+  const now = performance.now();
+  const realMs = now - lastFrameAt;
+  lastFrameAt = now;
+  perf.accum += realMs;
+  perf.frames += 1;
+  if (perf.accum >= 500) {
+    perf.ms = perf.accum / perf.frames;
+    perf.fps = 1000 / Math.max(0.001, perf.ms);
+    perf.accum = 0;
+    perf.frames = 0;
+    const hud = document.getElementById("perfHud");
+    if (hud) {
+      hud.textContent = `FPS ${Math.round(perf.fps)} / ${perf.ms.toFixed(1)}ms`;
+      hud.classList.toggle("is-low", perf.fps < 45);
+    }
+  }
+}
+
 function updateDoorPrompt() {
   const prompt = document.getElementById("doorPrompt");
   if (!prompt) return;
@@ -3088,6 +3258,7 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(0.033, clock.getDelta());
   try {
+    updatePerf(dt);
     resize();
     updateGameReadyState();
     state.arrowCooldown = Math.max(0, state.arrowCooldown - dt);
@@ -3142,12 +3313,15 @@ addDoorGuideArrows();
 drawMinimap();
 drawPlayerHpHud();
 drawDoorPrompt();
+drawPerfHud();
 drawLoadingOverlay();
 drawPuzzleModal();
 drawGameOverOverlay();
 drawVictoryOverlay();
 spawnBots();
 loadPaladinBotModel();
+applyReportShotPreset();
+prewarmArrowAssets();
 
 let mouseLookActive = false;
 

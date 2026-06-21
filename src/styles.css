@@ -247,6 +247,29 @@ canvas {
   background: rgba(90, 90, 98, 0.36);
 }
 
+.perf-hud {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  z-index: 4;
+  min-width: 118px;
+  padding: 6px 9px;
+  border: 1px solid rgba(141, 234, 255, 0.24);
+  border-radius: 8px;
+  background: rgba(3, 5, 9, 0.72);
+  color: #bffbff;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  transform: translateX(-50%);
+  backdrop-filter: blur(10px);
+}
+
+.perf-hud.is-low {
+  border-color: rgba(255, 128, 96, 0.5);
+  color: #ffb199;
+}
+
 .game-over {
   position: absolute;
   inset: 0;
