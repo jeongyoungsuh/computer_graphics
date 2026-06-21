@@ -23,7 +23,25 @@
         <div>Procedural debug rig</div>
       </section>
     </main>
-    <script type="module" src="/src/game.js?v=perf-arrow-cache-20260621"></script>
+    <script>
+      window.addEventListener("error", (event) => {
+        const target = document.getElementById("status");
+        if (target) {
+          target.hidden = false;
+          target.style.display = "block";
+          target.innerHTML = `Runtime error<br>${String(event.message || event.error || "unknown").slice(0, 180)}`;
+        }
+      });
+      window.addEventListener("unhandledrejection", (event) => {
+        const target = document.getElementById("status");
+        if (target) {
+          target.hidden = false;
+          target.style.display = "block";
+          target.innerHTML = `Runtime error<br>${String(event.reason?.message || event.reason || "unknown").slice(0, 180)}`;
+        }
+      });
+    </script>
+    <script type="module" src="/src/game.js?v=arrow-cache-init-fix-20260621"></script>
     <script type="module" src="/src/skinned-statue.js"></script>
   </body>
 </html>

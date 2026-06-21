@@ -7,9 +7,20 @@ const canvas = document.getElementById("game");
 const statusEl = document.getElementById("status");
 const promptEl = document.getElementById("prompt");
 
+const PERF = {
+  pixelRatio: 1.25,
+  shadows: false,
+  floorTrim: false,
+  maxTorchLights: 6,
+  maxArrowLights: 4,
+  botAnimationDistance: 22,
+  uiUpdateInterval: 0.2,
+  minimapUpdateInterval: 0.2,
+};
+
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
-renderer.shadowMap.enabled = false;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, PERF.pixelRatio));
+renderer.shadowMap.enabled = PERF.shadows;
 renderer.shadowMap.type = THREE.BasicShadowMap;
 
 const scene = new THREE.Scene();
@@ -128,7 +139,7 @@ let lastSkeletonHelperUpdate = 0;
 let lastPromptRoomId = "";
 let lastFrameAt = performance.now();
 const perf = { fps: 0, ms: 0, accum: 0, frames: 0 };
-const MAX_STUCK_ARROW_LIGHTS = 6;
+const MAX_STUCK_ARROW_LIGHTS = 12;
 const botAssets = {
   paladin: null,
   paladinReady: false,
@@ -311,7 +322,7 @@ function addLights() {
   const moon = new THREE.DirectionalLight(0x6d82a1, 1.1);
   moon.userData.baseIntensity = 1.1;
   moon.position.set(-18, 24, 14);
-  moon.castShadow = true;
+  moon.castShadow = PERF.shadows;
   moon.shadow.mapSize.set(1024, 1024);
   scene.add(moon);
   worldLights.moon = moon;
@@ -814,7 +825,7 @@ function addFloorTile(pos, room) {
   lineB.position.set(pos.x - CELL * 0.49, 0.024, pos.z);
   scene.add(lineA, lineB);
 
-  if (room?.accent) {
+  if (PERF.floorTrim && room?.accent) {
     const trim = new THREE.Mesh(new THREE.BoxGeometry(CELL * 0.62, 0.035, 0.055), makeMaterial(room.accent, 0.82));
     trim.position.set(pos.x, 0.035, pos.z + CELL * 0.36);
     scene.add(trim);
@@ -855,7 +866,7 @@ function addStonePillar(pos, room) {
   const light = new THREE.PointLight(0xff8a35, 0, 9, 1.7);
   light.position.y = 3.18;
   group.add(base, shaft, cap, flame, light);
-  group.traverse((obj) => { if (obj.isMesh) { obj.castShadow = true; obj.receiveShadow = true; } });
+  group.traverse((obj) => { if (obj.isMesh) { obj.castShadow = obj === shaft || obj === cap; obj.receiveShadow = true; } });
   scene.add(group);
   const collider = { kind: "pillar", x: pos.x, z: pos.z, r: 0.74, minY: 0, maxY: 3.05 };
   colliders.push(collider);
@@ -879,7 +890,7 @@ function addBookshelf(pos, room) {
     group.add(book);
   }
   group.rotation.y = room?.id === "2" && pos.x > 0 ? Math.PI / 2 : 0;
-  group.traverse((obj) => { if (obj.isMesh) { obj.castShadow = true; obj.receiveShadow = true; } });
+  group.traverse((obj) => { if (obj.isMesh) { obj.castShadow = obj === shelf; obj.receiveShadow = true; } });
   scene.add(group);
   colliders.push({ kind: "bookshelf", x: pos.x, z: pos.z, r: CELL * 0.42, minY: 0, maxY: 2.45 });
 }
@@ -895,7 +906,7 @@ function addStoneAltar(pos, room) {
   const glow = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 10), new THREE.MeshBasicMaterial({ color: room?.accent || 0xf3ca5d }));
   glow.position.y = 0.95;
   group.add(base, top, glow);
-  group.traverse((obj) => { if (obj.isMesh && obj !== glow) { obj.castShadow = true; obj.receiveShadow = true; } });
+  group.traverse((obj) => { if (obj.isMesh && obj !== glow) { obj.castShadow = false; obj.receiveShadow = true; } });
   scene.add(group);
   colliders.push({ kind: "altar", x: pos.x, z: pos.z, r: CELL * 0.42, minY: 0, maxY: 1.05 });
 }
@@ -946,7 +957,7 @@ function addBrazier(tx, ty, room) {
   group.add(base, bowl, flame, light);
   group.traverse((obj) => { if (obj.isMesh && obj !== flame) { obj.castShadow = true; obj.receiveShadow = true; } });
   scene.add(group);
-  torches.push({ group, flame, light, seed: Math.random() * 1000 });
+  torches.push({ group, flame, light, baseIntensity: 2.2, seed: Math.random() * 1000 });
   return group;
 }
 
@@ -1252,7 +1263,7 @@ function addTorch(tx, ty) {
   light.position.y = 1.55;
   group.add(stand, flame, light);
   scene.add(group);
-  return { group, flame, light, seed: Math.random() * 1000 };
+  return { group, flame, light, baseIntensity: 2.0, seed: Math.random() * 1000 };
 }
 
 const torches = [];
@@ -1262,9 +1273,10 @@ function addTorches() {
 }
 
 function updateTorches(time) {
+  updateActiveTorchLights();
   for (const torch of torches) {
     const flicker = 0.85 + Math.sin(time * 7 + torch.seed) * 0.11 + Math.sin(time * 13 + torch.seed) * 0.05;
-    torch.light.intensity = torch.light.userData.baseIntensity * state.brightness * flicker;
+    torch.light.intensity = torch.light.visible ? (torch.baseIntensity || torch.light.userData.baseIntensity || 1.4) * state.brightness * flicker : 0;
     torch.flame.scale.setScalar(0.85 + flicker * 0.25);
   }
   for (const pillar of room1Pillars) {
@@ -1273,6 +1285,17 @@ function updateTorches(time) {
     pillar.light.intensity = 2.6 * state.brightness * flicker;
     pillar.flame.scale.setScalar(0.9 + flicker * 0.3);
   }
+}
+
+function updateActiveTorchLights() {
+  const sorted = torches
+    .map((torch) => ({ torch, dist: torch.group.position.distanceTo(player.pos) }))
+    .sort((a, b) => a.dist - b.dist);
+  sorted.forEach((entry, index) => {
+    const active = index < PERF.maxTorchLights && entry.dist < 24;
+    entry.torch.light.visible = active;
+    if (!active) entry.torch.light.intensity = 0;
+  });
 }
 
 function lightRoom1Pillar(pillar) {
@@ -2033,41 +2056,50 @@ function makeBowMesh() {
   return group;
 }
 
-const arrowAssetCache = {
-  shafts: new Map(),
-  tip: new THREE.ConeGeometry(0.055, 0.16, 10),
-  feather: new THREE.PlaneGeometry(0.12, 0.06),
-  flame: new THREE.SphereGeometry(0.075, 10, 8),
-  shaftMat: makeMaterial(0x6b4427, 0.55),
-  tipMat: makeMaterial(0xcfd5dd, 0.38),
-  featherMat: new THREE.MeshBasicMaterial({ color: 0xe9edf2, side: THREE.DoubleSide }),
-  flameMat: new THREE.MeshBasicMaterial({ color: 0xff8236 }),
-};
+var arrowAssetCache;
+
+function getArrowAssetCache() {
+  if (!arrowAssetCache) {
+    arrowAssetCache = {
+      shafts: new Map(),
+      tip: new THREE.ConeGeometry(0.055, 0.16, 10),
+      feather: new THREE.PlaneGeometry(0.12, 0.06),
+      flame: new THREE.SphereGeometry(0.075, 10, 8),
+      shaftMat: makeMaterial(0x6b4427, 0.55),
+      tipMat: makeMaterial(0xcfd5dd, 0.38),
+      featherMat: new THREE.MeshBasicMaterial({ color: 0xe9edf2, side: THREE.DoubleSide }),
+      flameMat: new THREE.MeshBasicMaterial({ color: 0xff8236 }),
+    };
+  }
+  return arrowAssetCache;
+}
 
 function getArrowShaftGeometry(length) {
+  const cache = getArrowAssetCache();
   const key = length.toFixed(2);
-  if (!arrowAssetCache.shafts.has(key)) {
-    arrowAssetCache.shafts.set(key, new THREE.CylinderGeometry(0.018, 0.018, length, 8));
+  if (!cache.shafts.has(key)) {
+    cache.shafts.set(key, new THREE.CylinderGeometry(0.018, 0.018, length, 8));
   }
-  return arrowAssetCache.shafts.get(key);
+  return cache.shafts.get(key);
 }
 
 function makeArrowMesh(length = 0.82, burning = true) {
+  const cache = getArrowAssetCache();
   const group = new THREE.Group();
-  const shaft = new THREE.Mesh(getArrowShaftGeometry(length), arrowAssetCache.shaftMat);
+  const shaft = new THREE.Mesh(getArrowShaftGeometry(length), cache.shaftMat);
   shaft.rotation.x = Math.PI / 2;
-  const tip = new THREE.Mesh(arrowAssetCache.tip, arrowAssetCache.tipMat);
+  const tip = new THREE.Mesh(cache.tip, cache.tipMat);
   tip.position.z = -length / 2 - 0.07;
   tip.rotation.x = -Math.PI / 2;
   for (const side of [-1, 1]) {
-    const feather = new THREE.Mesh(arrowAssetCache.feather, arrowAssetCache.featherMat);
+    const feather = new THREE.Mesh(cache.feather, cache.featherMat);
     feather.position.set(side * 0.035, 0, length / 2 - 0.08);
     feather.rotation.set(0, side * 0.55, 0);
     group.add(feather);
   }
   group.add(shaft, tip);
   if (burning) {
-    const flame = new THREE.Mesh(arrowAssetCache.flame, arrowAssetCache.flameMat);
+    const flame = new THREE.Mesh(cache.flame, cache.flameMat);
     flame.position.z = -length / 2 - 0.16;
     group.add(flame);
     group.userData.flame = flame;
@@ -2352,7 +2384,8 @@ function updateBotVisual(bot, dt, animateBot = true, visibleBot = true) {
 
   const pulse = bot.hitFlash > 0 ? 1.35 : 1;
   bot.mesh.scale.copy(bot.baseScale).multiplyScalar(pulse);
-  if (bot.mixer && animateBot) bot.mixer.update(dt);
+  const animateMixer = animateBot && bot.pos.distanceTo(player.pos) < PERF.botAnimationDistance;
+  if (bot.mixer && animateMixer) bot.mixer.update(dt);
   applyBotProceduralMotion(bot, dt);
 }
 
@@ -2367,7 +2400,7 @@ function updateBots(dt) {
       bot.mesh.position.copy(bot.pos);
       bot.mesh.visible = deadVisible;
       bot.stateLock = Math.max(0, bot.stateLock - dt);
-      if (deadVisible && bot.mixer && bot.stateLock > 0) bot.mixer.update(dt);
+      if (deadVisible && bot.mixer && bot.stateLock > 0 && bot.pos.distanceTo(player.pos) < PERF.botAnimationDistance) bot.mixer.update(dt);
       continue;
     }
 
@@ -2683,12 +2716,23 @@ function updateArrows(dt) {
   for (let i = stuckArrows.length - 1; i >= 0; i--) {
     const stuck = stuckArrows[i];
     stuck.life -= dt * 0.18;
-    stuck.light.intensity = Math.max(0, stuck.life / 8) * 2.2 * state.brightness;
+    stuck.light.intensity = stuck.light.visible ? Math.max(0, stuck.life / 8) * 2.2 * state.brightness : 0;
     if (stuck.life <= 0) {
       scene.remove(stuck.mesh, stuck.light);
       stuckArrows.splice(i, 1);
     }
   }
+  updateStuckArrowLightBudget();
+}
+
+function updateStuckArrowLightBudget() {
+  stuckArrows.forEach((stuck, i) => {
+    const active = i >= stuckArrows.length - PERF.maxArrowLights;
+    if (stuck.light) {
+      stuck.light.visible = active;
+      if (!active) stuck.light.intensity = 0;
+    }
+  });
 }
 
 function stickArrow(arrow, pos, targetHit) {
@@ -2699,6 +2743,7 @@ function stickArrow(arrow, pos, targetHit) {
   arrow.light.intensity = targetHit ? 3.2 : 2.2;
   arrow.light.distance = targetHit ? 12 : 9;
   stuckArrows.push({ mesh: arrow.mesh, light: arrow.light, life: targetHit ? 14 : 9 });
+  updateStuckArrowLightBudget();
   while (stuckArrows.length > MAX_STUCK_ARROW_LIGHTS) {
     const removed = stuckArrows.shift();
     if (removed) scene.remove(removed.mesh, removed.light);
@@ -3225,7 +3270,7 @@ function updateMinimap() {
   ctx.fill();
 }
 
-function resize() {
+function resizeIfNeeded() {
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(1, Math.floor(rect.width));
   const height = Math.max(1, Math.floor(rect.height));
@@ -3259,7 +3304,6 @@ function animate() {
   const dt = Math.min(0.033, clock.getDelta());
   try {
     updatePerf(dt);
-    resize();
     updateGameReadyState();
     state.arrowCooldown = Math.max(0, state.arrowCooldown - dt);
     updateMovement(dt);
@@ -3283,11 +3327,11 @@ function animate() {
     updateTrajectoryPreview();
     uiTimers.minimap += dt;
     uiTimers.hud += dt;
-    if (uiTimers.minimap >= 0.2) {
+    if (uiTimers.minimap >= PERF.minimapUpdateInterval) {
       updateMinimap();
       uiTimers.minimap = 0;
     }
-    if (uiTimers.hud >= 0.3) {
+    if (uiTimers.hud >= PERF.uiUpdateInterval) {
       updateLoadingOverlay();
       updateHUD();
       updatePlayerHpHud();
@@ -3322,6 +3366,8 @@ spawnBots();
 loadPaladinBotModel();
 applyReportShotPreset();
 prewarmArrowAssets();
+resizeIfNeeded();
+window.addEventListener("resize", resizeIfNeeded);
 
 let mouseLookActive = false;
 
@@ -3447,6 +3493,40 @@ window.debugPaladinAnimations = function () {
   };
   console.log(snapshot);
   return snapshot;
+};
+
+window.debugPerf = function () {
+  let meshCount = 0;
+  let lightCount = 0;
+  let visibleLightCount = 0;
+  let skinnedMeshCount = 0;
+  scene.traverse((obj) => {
+    if (obj.isMesh || obj.isSkinnedMesh) meshCount++;
+    if (obj.isSkinnedMesh) skinnedMeshCount++;
+    if (obj.isLight) {
+      lightCount++;
+      if (obj.visible && obj.intensity > 0) visibleLightCount++;
+    }
+  });
+  const report = {
+    meshCount,
+    skinnedMeshCount,
+    lightCount,
+    visibleLightCount,
+    torches: torches.length,
+    activeTorchLights: torches.filter((torch) => torch.light.visible && torch.light.intensity > 0).length,
+    stuckArrows: stuckArrows.length,
+    activeArrowLights: stuckArrows.filter((stuck) => stuck.light?.visible && stuck.light.intensity > 0).length,
+    bots: bots.length,
+    pixelRatio: renderer.getPixelRatio(),
+    shadows: renderer.shadowMap.enabled,
+    perf: { fps: Math.round(perf.fps), ms: Number(perf.ms.toFixed(2)) },
+    renderInfo: renderer.info.render,
+    memoryInfo: renderer.info.memory,
+    settings: PERF,
+  };
+  console.log(report);
+  return report;
 };
 
 window.debugMixamo = function () {
