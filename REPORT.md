@@ -184,9 +184,9 @@ npm run dev
 
 ## 8. 제출 링크
 
-- GitHub Repository: `여기에 GitHub 저장소 링크 입력`
-- Web 실행 링크: `여기에 GitHub Pages 또는 배포 링크 입력`
-- Report MD 링크: `여기에 REPORT.md가 열리는 GitHub 링크 입력`
+- GitHub Repository: https://github.com/jeongyoungsuh/computer_graphics
+- Web 실행 링크: https://jeongyoungsuh.github.io/computer_graphics/
+- Report MD 링크: https://github.com/jeongyoungsuh/computer_graphics/blob/main/REPORT.md
 
 ## 9. 결론
 

@@ -1,4 +1,9 @@
-﻿# Computer Graphics Assignment
+# Computer Graphics Assignment
+
+## Links
+
+- Game: https://jeongyoungsuh.github.io/computer_graphics/
+- Report: https://github.com/jeongyoungsuh/computer_graphics/blob/main/REPORT.md
 
 ## Local Development
 
