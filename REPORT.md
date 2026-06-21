@@ -35,31 +35,41 @@ Room 3은 유리 다리 구간임. 각 단계마다 좌우 두 장의 유리가 
 
 ![Room 3 유리 다리와 화살 판별 장면](public/assets/screenshots/room3.png)
 
-## 3. 강의 내용과 구현 내용 매핑
+## 3. 강의 자료와 구현 내용 매핑
 
-강의에서 다룬 그래픽스 요소를 게임 기능 안에 넣는 것을 목표로 했음. 코드 설명은 너무 길게 쓰기보다, 어떤 개념을 어떤 게임 기능으로 연결했는지 중심으로 정리함.
+아래 표는 각 기능이 어느 강의 자료의 개념과 연결되는지 정리한 것임. 코드 자체를 길게 설명하기보다, 강의에서 다룬 그래픽스 개념이 게임 안에서 어떤 식으로 쓰였는지 중심으로 작성함.
 
-| 강의 내용 | 게임 구현 내용 |
-| --- | --- |
-| Scene Graph | `THREE.Scene` 안에 맵, 문, 캐릭터, 화살, 적, 퍼즐 오브젝트를 배치함. 활, 화살, 문, Paladin 모델은 `Group`으로 묶어서 위치와 회전을 같이 제어함. |
-| Camera / Projection | 3인칭 플레이에 맞춰 `PerspectiveCamera`를 사용함. 카메라는 플레이어 뒤쪽을 따라오고, 플레이어 주변 목표 지점을 바라보게 만듦. |
-| Geometry Modeling | 문자열 맵 데이터를 읽어서 벽, 바닥, 장애물, 돌기둥, 문, 유리 다리를 생성함. 기본 geometry를 조합해서 던전 구조를 만듦. |
-| Material / Texture | 바닥과 벽은 벽돌 느낌이 나도록 재질을 조정했고, 유리는 투명 재질을 사용함. 룬, 불꽃, 안내 UI는 어두운 맵에서 잘 보이도록 밝은 색을 사용함. |
-| Lighting | 기본 조명, 방향광, 횃불 조명, 불화살 조명을 같이 사용함. 렉이 심해져서 가까운 횃불과 최근 불화살만 실제 PointLight로 켜지게 제한함. |
-| Transformation | 플레이어 이동, 문 열림, 유리 파괴, 화살 이동에 위치/회전/스케일 변환을 사용함. 문은 회전값을 보간해서 양쪽으로 열리게 만듦. |
-| Quaternion | 화살이 날아가는 방향을 맞출 때 `mesh.quaternion.setFromUnitVectors()`를 사용함. 화살의 기본 방향을 속도 벡터 방향으로 돌리는 부분임. |
-| Animation | 플레이어는 Mixamo 궁수 모델을 사용하고, Paladin은 FBX 애니메이션을 사용함. 이동, 공격, 피격, 사망 상태에 따라 animation action을 바꿈. |
-| Collision Detection | 벽, 문, 돌기둥, 적, 유리, 바닥 충돌을 처리함. 화살은 이전 위치와 현재 위치 사이의 선분을 사용해서 빠르게 지나가도 맞을 수 있게 처리함. |
-| Interaction / UI | WASD 이동, Shift 달리기, Space 점프, 좌클릭 발사, F 키 문 상호작용을 넣음. HP, 화살 개수, 방 목표, 문 안내, 사망/승리 UI도 넣음. |
-| GI 기술 | 불화살이 표면에 박힌 위치에 작은 조명을 남겨 Surfel GI처럼 표면에서 빛이 퍼지는 느낌을 연출함. |
+| 강의 자료 | 강의 개념 | 게임 구현 내용 |
+| --- | --- | --- |
+| `L2.graphics_pipeline.pdf` | Graphics pipeline, camera space, projection space, screen space, view/projection/viewport transform | 게임은 Three.js의 `Scene`, `PerspectiveCamera`, `WebGLRenderer`를 기반으로 렌더링됨. 플레이어 뒤를 따라가는 3인칭 카메라는 월드 공간의 캐릭터 위치를 기준으로 view transform을 만들고, perspective projection을 통해 화면에 표시됨. |
+| `L2.graphics_pipeline.pdf` | LookAt 기반 view transform, camera position, look-at position, viewing direction | 카메라는 플레이어의 현재 위치와 시선 방향을 기준으로 목표 지점을 바라봄. `camera.lookAt()`을 사용해서 카메라 위치, 바라볼 지점, up vector를 이용한 view transform 개념을 게임 카메라에 적용함. |
+| `L3.rasterization_2.pdf` | Rasterization, fragment, clipping, view frustum culling, depth test | 벽, 바닥, 유리, 캐릭터 모델은 모두 삼각형 mesh로 GPU rasterization 과정을 거쳐 화면에 그려짐. Three.js 내부에서 view frustum 밖의 물체는 렌더링 대상에서 제외되고, depth test로 앞뒤 관계가 정리됨. Paladin과 Mixamo 모델은 `frustumCulled` 설정도 직접 조정함. |
+| `L1-1.rotation_3 (1).pdf` | Axis convention, Euler angle, yaw/pitch, gimbal lock 문제 | 플레이어 조준은 yaw/pitch 값을 사용해서 방향 벡터를 계산함. 다만 화살 mesh를 실제 비행 방향에 맞추는 부분은 Euler 각도를 직접 조합하지 않고 quaternion을 사용함. |
+| `L1-1.rotation_3 (1).pdf` | Rotation representation, Euler 한계와 안정적인 방향 정렬 | 화살은 `mesh.quaternion.setFromUnitVectors()`로 기본 방향 `(0, 0, -1)`을 속도 방향으로 회전시킴. 그래서 화살이 포물선으로 날아가도 모델 방향이 비행 방향을 따라가게 됨. |
+| `L4.shading_lighting (2).pdf` | Light sources, point light, directional light, hemisphere light, direct/local lighting | 던전 전체 밝기는 `HemisphereLight`와 `DirectionalLight`로 잡고, 횃불과 불화살은 `PointLight`로 표현함. 어두운 방에서 불화살이나 횃불 주변만 밝아지는 효과가 여기와 연결됨. |
+| `L4.shading_lighting (2).pdf` | Phong lighting, ambient/diffuse/specular, attenuation, material-light interaction | 벽, 바닥, 캐릭터, 유리는 `MeshStandardMaterial` 계열 재질로 조명 영향을 받음. PointLight는 거리에 따라 영향이 줄어드는 attenuation을 가지므로 불화살이 가까운 벽과 바닥만 밝히는 느낌이 남. |
+| `L5.texture (2).pdf` | Texture mapping, texture coordinate, sampling, material system | 바닥과 벽은 단색 박스 느낌을 줄이기 위해 벽돌 패턴 계열의 시각 요소를 넣음. 유리 다리, 룬, 불꽃은 서로 다른 재질과 색을 사용해서 같은 geometry라도 표면 성격이 다르게 보이도록 구성함. |
+| `L5.texture (2).pdf` | Texture filtering, mipmap, normal/bump/displacement map 개념 | 본 프로젝트에서 고급 normal map이나 displacement map까지 쓰지는 않았음. 대신 과제 범위 안에서 material 색, roughness, opacity, emissive 효과를 조합해서 벽돌, 유리, 불꽃의 차이를 보이게 함. |
+| `L6.Skeleton_and_Animation (3).pdf` | Skeleton, joint hierarchy, bone, skinned mesh | 플레이어 궁수와 Paladin은 skeleton을 가진 skinned mesh임. 모델의 bone hierarchy에 애니메이션 데이터가 적용되면서 mesh 표면이 같이 변형되는 구조임. |
+| `L6.Skeleton_and_Animation (3).pdf` | Rigging, motion capture, animation retargeting, FK/IK 개념 | Mixamo 궁수와 Paladin FBX 애니메이션을 `AnimationMixer`로 재생함. 걷기, 달리기, 공격, 피격, 사망 상태에 따라 animation action을 바꾸고, 공격 중에는 이동을 멈춰 모션이 어색하지 않게 조정함. |
+| `Global Illumination-DDGI (3).pdf` | DDGI, probe grid, L1 SH, ray tracing from probes, indirect diffuse irradiance | DDGI는 3D 공간에 probe grid를 두고 각 probe에 radiance/irradiance 정보를 저장하는 방식임. 내 게임은 probe grid를 만들지는 않았기 때문에 DDGI가 아니라는 점을 명확히 구분함. |
+| `Global Illumination-SurfelGI (2).pdf` | Surfel, surface-attached lighting cache, hemisphere sampling around surface normal, nearby surfel lookup | 내 GI 연출은 이 자료와 가장 가까움. 불화살이 표면에 박힌 지점을 작은 조명 기여점처럼 사용함. 실제 surfel SH 저장이나 hemisphere ray sampling은 하지 않았지만, “표면에 붙은 조명 cache가 주변 조명에 기여한다”는 아이디어를 게임 방식으로 단순화함. |
+| `Global Illumination-VoxelGI (2).pdf` | Voxel GI, voxelization, cone tracing, voxel radiance, 3D grid storage | Voxel GI는 장면을 voxel volume으로 변환하고 cone tracing으로 간접광을 샘플링하는 방식임. 내 게임은 voxelization이나 cone tracing을 하지 않으므로 VoxelGI가 아니라 SurfelGI 스타일 연출로 분류함. |
+| `Global Illumination-SurfelGI (2).pdf` / `L4.shading_lighting (2).pdf` | Indirect lighting과 기존 lighting model 결합 | 불화살이 표면에 박힌 뒤 생기는 작은 PointLight는 기존 조명 모델에 추가되는 방식임. 완전한 GI 계산은 아니지만, 표면 기반 간접 조명처럼 보이는 효과를 실시간 게임 안에서 확인할 수 있게 함. |
 
 ![문자열 맵 기반 방 구성](public/assets/screenshots/19_map_layout.png)
 
 ## 4. GI 기술 적용: Surfel GI 스타일 구현
 
-이 프로젝트에서 선택한 GI 방식은 완전한 Surfel GI가 아니라 Surfel GI 스타일의 근사 연출임. 불화살이 벽, 바닥, 오브젝트 표면에 박히면 그 지점에 작은 PointLight를 남김. 표면에 남은 지점이 주변을 밝히기 때문에, 불화살이 간접광처럼 공간에 영향을 주는 느낌을 낼 수 있음.
+GI 자료 세 개를 비교하면, 내 게임은 DDGI나 VoxelGI보다는 SurfelGI 쪽에 가까움.
 
-완전한 Surfel GI를 구현하지 않은 이유도 있음. 실제 Surfel GI는 표면에 많은 surfel을 만들고, 각 surfel의 위치, 법선, 반사율, 가시성, 조명 기여도를 관리해야 함. 이걸 실시간으로 처리하려면 별도 GPU 버퍼, 셰이더, 공간 탐색 구조가 필요함. 이번 게임은 Three.js 기본 렌더링 위에서 Paladin FBX 애니메이션, 유리 다리, 충돌, UI까지 같이 돌아가야 했음. 실제로 PointLight와 SkinnedMesh가 많아지면 FPS가 떨어졌기 때문에, 과제 범위에서는 “표면에 남는 조명 기여점”이라는 핵심 아이디어를 게임 방식에 맞게 줄여서 구현함.
+- `Global Illumination-DDGI (3).pdf`: DDGI는 probe grid를 공간에 배치하고, 각 probe가 ray tracing으로 radiance를 모은 뒤 L1 SH 계수로 저장하는 방식임.
+- `Global Illumination-VoxelGI (2).pdf`: VoxelGI는 장면을 voxel로 바꾸고, voxel radiance를 cone tracing으로 샘플링하는 방식임.
+- `Global Illumination-SurfelGI (2).pdf`: SurfelGI는 surfel을 surface-attached lighting cache처럼 쓰고, 표면 주변의 조명 정보를 재사용하는 방식임.
+
+내 구현은 완전한 SurfelGI는 아님. 하지만 불화살이 벽, 바닥, 돌기둥 같은 표면에 박힌 뒤 그 위치에 작은 PointLight를 남기기 때문에, “표면에 붙은 조명 기여점이 주변을 밝힌다”는 SurfelGI의 기본 아이디어와 가장 잘 맞음. 그래서 보고서에서는 DDGI나 VoxelGI가 아니라 Surfel GI 스타일의 근사 구현으로 정리함.
+
+완전한 SurfelGI를 구현하지 않은 이유도 있음. 강의 자료 기준의 SurfelGI는 surfel의 위치, normal, radiance, indirect radiance를 저장하고, 표면 normal을 기준으로 hemisphere sampling이나 nearby surfel lookup을 수행해야 함. 이걸 제대로 하려면 별도 GPU buffer, shader, surfel placement, visibility test가 필요함. 이번 프로젝트는 Three.js 기본 렌더링 위에서 Paladin skinned mesh, FBX animation, 유리 다리, 충돌, UI까지 동시에 처리해야 했음. 실제 개발 중에도 PointLight와 SkinnedMesh가 많아지면 FPS가 떨어졌기 때문에, surfel 자료구조 전체를 구현하기보다 표면에 남는 조명 cache 느낌을 게임 기믹에 맞게 단순화함.
 
 ![불화살 충돌 전 어두운 공간](public/assets/screenshots/17a_before_surfel_light.png)
 
